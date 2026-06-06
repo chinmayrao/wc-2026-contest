@@ -3,11 +3,11 @@ import { useState, useEffect } from "react";
 // ─── DATA ────────────────────────────────────────────────────────────────────
 
 const CONFEDERATIONS = {
-  UEFA: ["France", "England", "Spain", "Germany", "Portugal", "Netherlands", "Belgium", "Italy", "Croatia", "Switzerland", "Austria", "Poland", "Denmark", "Serbia", "Scotland", "Ukraine"],
-  CONMEBOL: ["Brazil", "Argentina", "Uruguay", "Colombia", "Ecuador", "Chile"],
-  CONCACAF: ["USA", "Mexico", "Canada", "Costa Rica", "Jamaica", "Panama"],
-  CAF: ["Morocco", "Senegal", "Nigeria", "Cameroon", "Egypt", "Ghana", "Tunisia", "Mali", "South Africa"],
-  AFC: ["Japan", "South Korea", "Australia", "Saudi Arabia", "Iran", "Qatar", "Jordan", "Indonesia"],
+  UEFA: ["France", "England", "Spain", "Germany", "Portugal", "Netherlands", "Belgium", "Croatia", "Switzerland", "Austria", "Scotland", "Sweden", "Turkey", "Czech Republic", "Bosnia and Herzegovina", "Norway"],
+  CONMEBOL: ["Brazil", "Argentina", "Uruguay", "Colombia", "Ecuador", "Paraguay"],
+  CONCACAF: ["USA", "Mexico", "Canada", "Panama", "Haiti", "Curacao"],
+  CAF: ["Morocco", "Senegal", "Nigeria", "Egypt", "Mali", "Algeria", "Tunisia", "DR Congo", "Cape Verde", "South Africa"],
+  AFC: ["Japan", "South Korea", "Australia", "Saudi Arabia", "Iran", "Jordan", "Uzbekistan", "Indonesia"],
   OFC: ["New Zealand"],
 };
 
@@ -17,36 +17,79 @@ const ALL_TEAMS = Object.entries(CONFEDERATIONS).flatMap(([conf, teams]) =>
 
 // Top strikers pool (name, team, confederation)
 const STRIKERS = [
+  // UEFA
   { name: "Kylian Mbappé", team: "France", confederation: "UEFA" },
-  { name: "Erling Haaland", team: "Norway", confederation: "UEFA" },
+  { name: "Marcus Thuram", team: "France", confederation: "UEFA" },
   { name: "Harry Kane", team: "England", confederation: "UEFA" },
   { name: "Bukayo Saka", team: "England", confederation: "UEFA" },
-  { name: "Lamine Yamal", team: "Spain", confederation: "UEFA" },
-  { name: "Florian Wirtz", team: "Germany", confederation: "UEFA" },
-  { name: "Pedri", team: "Spain", confederation: "UEFA" },
   { name: "Jude Bellingham", team: "England", confederation: "UEFA" },
+  { name: "Lamine Yamal", team: "Spain", confederation: "UEFA" },
+  { name: "Mikel Oyarzabal", team: "Spain", confederation: "UEFA" },
+  { name: "Florian Wirtz", team: "Germany", confederation: "UEFA" },
+  { name: "Jamal Musiala", team: "Germany", confederation: "UEFA" },
+  { name: "Bruno Fernandes", team: "Portugal", confederation: "UEFA" },
+  { name: "Erling Haaland", team: "Norway", confederation: "UEFA" },
+  { name: "Memphis Depay", team: "Netherlands", confederation: "UEFA" },
+  { name: "Donyell Malen", team: "Netherlands", confederation: "UEFA" },
+  { name: "Romelu Lukaku", team: "Belgium", confederation: "UEFA" },
+  { name: "Lois Openda", team: "Belgium", confederation: "UEFA" },
+  { name: "Andrej Kramaric", team: "Croatia", confederation: "UEFA" },
+  { name: "Breel Embolo", team: "Switzerland", confederation: "UEFA" },
+  { name: "Christoph Baumgartner", team: "Austria", confederation: "UEFA" },
+  { name: "Scott McTominay", team: "Scotland", confederation: "UEFA" },
+  { name: "Viktor Gyokeres", team: "Sweden", confederation: "UEFA" },
+  { name: "Kerem Akturkoglu", team: "Turkey", confederation: "UEFA" },
+  { name: "Yusuf Yazici", team: "Turkey", confederation: "UEFA" },
+  { name: "Patrik Schick", team: "Czech Republic", confederation: "UEFA" },
+  { name: "Ermedin Demirovic", team: "Bosnia and Herzegovina", confederation: "UEFA" },
+  // CONMEBOL
   { name: "Vinicius Jr", team: "Brazil", confederation: "CONMEBOL" },
-  { name: "Rodrygo", team: "Brazil", confederation: "CONMEBOL" },
+  { name: "Endrick", team: "Brazil", confederation: "CONMEBOL" },
+  { name: "Matheus Cunha", team: "Brazil", confederation: "CONMEBOL" },
+  { name: "Raphinha", team: "Brazil", confederation: "CONMEBOL" },
+  { name: "Lionel Messi", team: "Argentina", confederation: "CONMEBOL" },
   { name: "Lautaro Martínez", team: "Argentina", confederation: "CONMEBOL" },
   { name: "Julián Álvarez", team: "Argentina", confederation: "CONMEBOL" },
   { name: "Luis Díaz", team: "Colombia", confederation: "CONMEBOL" },
+  { name: "James Rodríguez", team: "Colombia", confederation: "CONMEBOL" },
   { name: "Darwin Núñez", team: "Uruguay", confederation: "CONMEBOL" },
+  { name: "Facundo Torres", team: "Uruguay", confederation: "CONMEBOL" },
+  { name: "Enner Valencia", team: "Ecuador", confederation: "CONMEBOL" },
+  { name: "Miguel Almirón", team: "Paraguay", confederation: "CONMEBOL" },
+  // CONCACAF
   { name: "Christian Pulisic", team: "USA", confederation: "CONCACAF" },
   { name: "Folarin Balogun", team: "USA", confederation: "CONCACAF" },
+  { name: "Ricardo Pepi", team: "USA", confederation: "CONCACAF" },
+  { name: "Raúl Jiménez", team: "Mexico", confederation: "CONCACAF" },
   { name: "Hirving Lozano", team: "Mexico", confederation: "CONCACAF" },
   { name: "Jonathan David", team: "Canada", confederation: "CONCACAF" },
-  { name: "Victor Osimhen", team: "Nigeria", confederation: "CAF" },
+  { name: "Alphonso Davies", team: "Canada", confederation: "CONCACAF" },
+  // CAF
   { name: "Achraf Hakimi", team: "Morocco", confederation: "CAF" },
-  { name: "Sadio Mané", team: "Senegal", confederation: "CAF" },
+  { name: "Youssef En-Nesyri", team: "Morocco", confederation: "CAF" },
   { name: "Mohamed Salah", team: "Egypt", confederation: "CAF" },
-  { name: "Kaoru Mitoma", team: "Japan", confederation: "AFC" },
+  { name: "Omar Marmoush", team: "Egypt", confederation: "CAF" },
+  { name: "Victor Osimhen", team: "Nigeria", confederation: "CAF" },
+  { name: "Sadio Mané", team: "Senegal", confederation: "CAF" },
+  { name: "Lyle Foster", team: "South Africa", confederation: "CAF" },
+  { name: "Evidence Makgopa", team: "South Africa", confederation: "CAF" },
+  { name: "Serhou Guirassy", team: "Mali", confederation: "CAF" },
+  { name: "Islam Slimani", team: "Algeria", confederation: "CAF" },
+  // AFC
   { name: "Son Heung-min", team: "South Korea", confederation: "AFC" },
   { name: "Ayase Ueda", team: "Japan", confederation: "AFC" },
+  { name: "Ritsu Doan", team: "Japan", confederation: "AFC" },
+  { name: "Mehdi Taremi", team: "Iran", confederation: "AFC" },
   { name: "Salem Al-Dawsari", team: "Saudi Arabia", confederation: "AFC" },
+  { name: "Yasser Al-Shahrani", team: "Saudi Arabia", confederation: "AFC" },
+  { name: "Mousa Tamari", team: "Jordan", confederation: "AFC" },
+  { name: "Eldor Shomurodov", team: "Uzbekistan", confederation: "AFC" },
+  // OFC
+  { name: "Chris Wood", team: "New Zealand", confederation: "OFC" },
 ];
 
-const STAGE_MULTIPLIERS = { Group: 1, R16: 2, QF: 3, SF: 4, Final: 5 };
-const STAGES = ["Group", "R16", "QF", "SF", "Final"];
+const STAGE_MULTIPLIERS = { Group: 1, R32: 2, R16: 3, QF: 4, SF: 5, Final: 6 };
+const STAGES = ["Group", "R32", "R16", "QF", "SF", "Final"];
 
 // ─── SCORING ─────────────────────────────────────────────────────────────────
 
@@ -652,7 +695,7 @@ export default function App() {
           }}>
             <strong style={{ color: "#f59e0b" }}>Rules:</strong> Rank 10 teams (max 5 from any confederation).
             Each win scores <strong style={{ color: "#f0e6d3" }}>(11−rank) × stage multiplier</strong> · draws score half.
-            Stage multipliers: Group×1, R16×2, QF×3, SF×4, Final×5.
+            Stage multipliers: Group×1, R32×2, R16×3, QF×4, SF×5, Final×6.
             Pick 3 strikers from <em>different confederations</em>: Striker 1 = 20×goals, S2 = 15×, S3 = 10×.
           </div>
         </div>
@@ -667,4 +710,3 @@ export default function App() {
     </div>
   );
 }
-//updated
