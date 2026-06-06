@@ -302,9 +302,17 @@ function EntryForm({ onSubmit }) {
       </div>
 
       <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
           <label style={labelStyle}>3 Strikers — Different Confederations</label>
           <span style={{ fontSize: 12, color: "#a89880" }}>20 / 15 / 10 × goals</span>
+        </div>
+        <div style={{
+          background: "#f59e0b0d", border: "1px solid #f59e0b22",
+          borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#a89880",
+          lineHeight: 1.7, marginBottom: 12
+        }}>
+          <strong style={{ color: "#f59e0b" }}>Striker rules:</strong> Pick 3 strikers from <em>different confederations</em>.
+          Striker 1 scores <strong style={{ color: "#f0e6d3" }}>20 × goals</strong>, Striker 2 = <strong style={{ color: "#f0e6d3" }}>15 × goals</strong>, Striker 3 = <strong style={{ color: "#f0e6d3" }}>10 × goals</strong>.
         </div>
         {strikers.map((val, i) => {
           const found = STRIKERS.find((x) => x.name === val);
