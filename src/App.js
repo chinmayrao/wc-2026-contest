@@ -1,5 +1,44 @@
 import { useState, useEffect } from "react";
 
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://rxmdwwpovwzriokgiugk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_lRtm75gVwNTAAWY_ty_Zvg_sUBwddpf";
+
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+async function getEntries() {
+  return sbFetch("entries?select=*&order=created_at.asc");
+}
+async function addEntry(entry) {
+  return sbFetch("entries", { method: "POST", body: JSON.stringify(entry) });
+}
+async function getResults() {
+  return sbFetch("results?select=*&order=created_at.asc");
+}
+async function addResult(result) {
+  return sbFetch("results", { method: "POST", body: JSON.stringify(result) });
+}
+async function deleteAllResults() {
+  return sbFetch("results?id=gte.0", { method: "DELETE" });
+}
+
 // ─── DATA ────────────────────────────────────────────────────────────────────
 
 const CONFEDERATIONS = {
@@ -15,7 +54,6 @@ const ALL_TEAMS = Object.entries(CONFEDERATIONS).flatMap(([conf, teams]) =>
   teams.map((t) => ({ name: t, confederation: conf }))
 );
 
-// Top strikers pool (name, team, confederation)
 const STRIKERS = [
   // UEFA
   { name: "Kylian Mbappé", team: "France", confederation: "UEFA" },
@@ -81,7 +119,6 @@ const STRIKERS = [
   { name: "Ritsu Doan", team: "Japan", confederation: "AFC" },
   { name: "Mehdi Taremi", team: "Iran", confederation: "AFC" },
   { name: "Salem Al-Dawsari", team: "Saudi Arabia", confederation: "AFC" },
-  { name: "Yasser Al-Shahrani", team: "Saudi Arabia", confederation: "AFC" },
   { name: "Mousa Tamari", team: "Jordan", confederation: "AFC" },
   { name: "Eldor Shomurodov", team: "Uzbekistan", confederation: "AFC" },
   // OFC
@@ -98,8 +135,6 @@ function computeScores(entries, results) {
     let teamPts = 0;
     let playerPts = 0;
     const breakdown = [];
-
-    // Team points
     entry.teams.forEach(({ team, rank }) => {
       let pts = 0;
       results.forEach((r) => {
@@ -113,8 +148,6 @@ function computeScores(entries, results) {
       breakdown.push({ label: `${team} (Rank ${rank})`, pts });
       teamPts += pts;
     });
-
-    // Striker points
     const strikerMults = [20, 15, 10];
     entry.strikers.forEach((striker, i) => {
       let goals = 0;
@@ -125,23 +158,15 @@ function computeScores(entries, results) {
       breakdown.push({ label: `S${i + 1}: ${striker} (${goals}g × ${strikerMults[i]})`, pts });
       playerPts += pts;
     });
-
-    return {
-      ...entry,
-      teamPts,
-      playerPts,
-      total: teamPts + playerPts,
-      breakdown,
-    };
+    return { ...entry, teamPts, playerPts, total: teamPts + playerPts, breakdown };
   });
 }
 
-// Tiebreaker: whose highest-ranked team progressed furthest
 function tiebreak(a, b, results) {
-  const stageOrder = { Group: 1, R16: 2, QF: 3, SF: 4, Final: 5 };
+  const stageOrder = { Group: 1, R32: 2, R16: 3, QF: 4, SF: 5, Final: 6 };
   const getFurthest = (entry) => {
     let best = 0;
-    entry.teams.forEach(({ team, rank }) => {
+    entry.teams.forEach(({ team }) => {
       results.forEach((r) => {
         if (r.team === team && r.result !== "L") {
           const s = stageOrder[r.stage] || 0;
@@ -151,25 +176,9 @@ function tiebreak(a, b, results) {
     });
     return best;
   };
-  const aFurthest = getFurthest(a);
-  const bFurthest = getFurthest(b);
-  if (aFurthest !== bFurthest) return bFurthest - aFurthest;
-  // secondary: rank of that team
-  const getTopRank = (entry) => Math.min(...entry.teams.map((t) => t.rank));
-  return getTopRank(a) - getTopRank(b);
-}
-
-// ─── STORAGE HELPERS ─────────────────────────────────────────────────────────
-
-async function loadData(key) {
-  try {
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : null;
-  } catch { return null; }
-}
-
-async function saveData(key, val) {
-  try { await window.storage.set(key, JSON.stringify(val), true); } catch (e) { console.error(e); }
+  const aF = getFurthest(a), bF = getFurthest(b);
+  if (aF !== bF) return bF - aF;
+  return Math.min(...a.teams.map(t => t.rank)) - Math.min(...b.teams.map(t => t.rank));
 }
 
 // ─── COMPONENTS ──────────────────────────────────────────────────────────────
@@ -182,8 +191,7 @@ const CONF_COLORS = {
 function Badge({ conf }) {
   return (
     <span style={{
-      background: CONF_COLORS[conf] + "22",
-      color: CONF_COLORS[conf],
+      background: CONF_COLORS[conf] + "22", color: CONF_COLORS[conf],
       border: `1px solid ${CONF_COLORS[conf]}44`,
       borderRadius: 4, padding: "1px 6px", fontSize: 11, fontWeight: 700,
       letterSpacing: "0.05em", fontFamily: "monospace"
@@ -199,6 +207,7 @@ function EntryForm({ onSubmit }) {
   const [strikers, setStrikers] = useState(["", "", ""]);
   const [errors, setErrors] = useState([]);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const confCount = (teamList) => {
     const counts = {};
@@ -223,25 +232,26 @@ function EntryForm({ onSubmit }) {
     const filledStrikers = strikers.filter(Boolean);
     if (filledStrikers.length !== 3) errs.push("Please pick exactly 3 strikers.");
     if (new Set(filledStrikers).size !== filledStrikers.length) errs.push("Duplicate strikers detected.");
-    const sConfs = strikers.map((s) => {
-      const found = STRIKERS.find((x) => x.name === s);
-      return found?.confederation;
-    }).filter(Boolean);
-    if (new Set(sConfs).size !== sConfs.filter(Boolean).length) errs.push("Strikers must be from different confederations.");
+    const sConfs = strikers.map((s) => STRIKERS.find((x) => x.name === s)?.confederation).filter(Boolean);
+    if (new Set(sConfs).size !== sConfs.length) errs.push("Strikers must be from different confederations.");
     return errs;
   };
 
   const handleSubmit = async () => {
     const errs = validate();
     if (errs.length) { setErrors(errs); return; }
-    const entry = {
-      id: Date.now(),
-      name: name.trim(),
-      teams: teams.map((t, i) => ({ team: t, rank: i + 1 })),
-      strikers,
-    };
-    await onSubmit(entry);
-    setSubmitted(true);
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        name: name.trim(),
+        teams: teams.map((t, i) => ({ team: t, rank: i + 1 })),
+        strikers,
+      });
+      setSubmitted(true);
+    } catch (e) {
+      setErrors(["Failed to submit. Please try again."]);
+    }
+    setSubmitting(false);
   };
 
   const counts = confCount(teams);
@@ -312,7 +322,7 @@ function EntryForm({ onSubmit }) {
           lineHeight: 1.7, marginBottom: 12
         }}>
           <strong style={{ color: "#f59e0b" }}>Striker rules:</strong> Pick 3 strikers from <em>different confederations</em>.
-          Striker 1 scores <strong style={{ color: "#f0e6d3" }}>20 × goals</strong>, Striker 2 = <strong style={{ color: "#f0e6d3" }}>15 × goals</strong>, Striker 3 = <strong style={{ color: "#f0e6d3" }}>10 × goals</strong>.
+          Striker 1 = <strong style={{ color: "#f0e6d3" }}>20 × goals</strong>, Striker 2 = <strong style={{ color: "#f0e6d3" }}>15 × goals</strong>, Striker 3 = <strong style={{ color: "#f0e6d3" }}>10 × goals</strong>.
         </div>
         {strikers.map((val, i) => {
           const found = STRIKERS.find((x) => x.name === val);
@@ -356,8 +366,8 @@ function EntryForm({ onSubmit }) {
         </div>
       )}
 
-      <button onClick={handleSubmit} style={btnStyle}>
-        Submit Entry →
+      <button onClick={handleSubmit} disabled={submitting} style={{ ...btnStyle, opacity: submitting ? 0.7 : 1 }}>
+        {submitting ? "Submitting…" : "Submit Entry →"}
       </button>
     </div>
   );
@@ -388,8 +398,7 @@ function Leaderboard({ entries, results }) {
               <span style={{
                 fontFamily: "'Playfair Display', serif",
                 fontSize: idx === 0 ? 28 : 20,
-                color: idx === 0 ? "#f59e0b" : "#6b7280",
-                width: 32
+                color: idx === 0 ? "#f59e0b" : "#6b7280", width: 32
               }}>#{idx + 1}</span>
               <div>
                 <div style={{ color: "#f0e6d3", fontWeight: 700, fontSize: 16 }}>{entry.name}</div>
@@ -399,12 +408,10 @@ function Leaderboard({ entries, results }) {
               </div>
             </div>
             <div style={{
-              fontFamily: "'Playfair Display', serif",
-              fontSize: 28, fontWeight: 700,
+              fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 700,
               color: idx === 0 ? "#f59e0b" : "#f0e6d3"
             }}>{entry.total.toFixed(1)}</div>
           </div>
-
           <details style={{ marginTop: 12 }}>
             <summary style={{ color: "#6b7280", fontSize: 12, cursor: "pointer" }}>Breakdown</summary>
             <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -433,6 +440,7 @@ function AdminPanel({ results, onAddResult, onClearResults, entries }) {
   const [tab, setTab] = useState("match");
   const [pw, setPw] = useState("");
   const [auth, setAuth] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   if (!auth) return (
     <div style={{ maxWidth: 400, margin: "0 auto", padding: "40px 16px" }}>
@@ -444,19 +452,23 @@ function AdminPanel({ results, onAddResult, onClearResults, entries }) {
     </div>
   );
 
-  const addMatch = () => {
+  const addMatch = async () => {
     if (!team || !stage || !result) return;
-    onAddResult({ type: "match", team, stage, result, id: Date.now() });
-    setTeam(""); setResult("W");
+    setSaving(true);
+    await onAddResult({ type: "match", team, stage, result });
+    setSaving(false);
+    setTeam("");
   };
 
-  const addGoal = () => {
+  const addGoal = async () => {
     if (!goalPlayer || !goalCount) return;
-    onAddResult({ type: "goal", player: goalPlayer, goals: Number(goalCount), stage, id: Date.now() });
-    setGoalPlayer(""); setGoalCount(1);
+    setSaving(true);
+    await onAddResult({ type: "goal", player: goalPlayer, goals: Number(goalCount), stage });
+    setSaving(false);
+    setGoalPlayer("");
+    setGoalCount(1);
   };
 
-  // All strikers from entries
   const allPickedStrikers = [...new Set(entries.flatMap(e => e.strikers))];
 
   return (
@@ -495,7 +507,9 @@ function AdminPanel({ results, onAddResult, onClearResults, entries }) {
               }}>{r === "W" ? "Win" : r === "D" ? "Draw" : "Loss"}</button>
             ))}
           </div>
-          <button onClick={addMatch} style={btnStyle}>Add Result</button>
+          <button onClick={addMatch} disabled={saving} style={{ ...btnStyle, opacity: saving ? 0.7 : 1 }}>
+            {saving ? "Saving…" : "Add Result"}
+          </button>
         </div>
       )}
 
@@ -515,7 +529,9 @@ function AdminPanel({ results, onAddResult, onClearResults, entries }) {
           </select>
           <label style={labelStyle}>Goals Scored</label>
           <input type="number" min={1} value={goalCount} onChange={e => setGoalCount(e.target.value)} style={inputStyle} />
-          <button onClick={addGoal} style={btnStyle}>Add Goals</button>
+          <button onClick={addGoal} disabled={saving} style={{ ...btnStyle, opacity: saving ? 0.7 : 1 }}>
+            {saving ? "Saving…" : "Add Goals"}
+          </button>
         </div>
       )}
 
@@ -530,7 +546,7 @@ function AdminPanel({ results, onAddResult, onClearResults, entries }) {
             <div key={r.id || i} style={{
               background: "#ffffff08", border: "1px solid #ffffff11",
               borderRadius: 8, padding: "8px 12px", marginBottom: 8,
-              fontSize: 13, color: "#a89880", display: "flex", justifyContent: "space-between"
+              fontSize: 13, color: "#a89880"
             }}>
               {r.type === "match"
                 ? <span><strong style={{ color: "#f0e6d3" }}>{r.team}</strong> · {r.stage} · <span style={{ color: r.result === "W" ? "#10b981" : r.result === "D" ? "#f59e0b" : "#ef4444" }}>{r.result}</span></span>
@@ -580,9 +596,8 @@ function EntriesList({ entries }) {
               );
             })}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {entry.strikers.map((s, i) => {
-              const found = STRIKERS.find(x => x.name === s);
               const mults = [20, 15, 10];
               return (
                 <span key={s} style={{
@@ -630,31 +645,38 @@ export default function App() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const loadAll = async () => {
+    try {
+      const [e, r] = await Promise.all([getEntries(), getResults()]);
+      setEntries(e);
+      setResults(r);
+    } catch (err) {
+      console.error("Load error:", err);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  // Refresh leaderboard every 30s
   useEffect(() => {
-    (async () => {
-      const e = await loadData("wc2026:entries");
-      const r = await loadData("wc2026:results");
-      if (e) setEntries(e);
-      if (r) setResults(r);
-      setLoading(false);
-    })();
+    const interval = setInterval(loadAll, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleSubmit = async (entry) => {
-    const updated = [...entries, entry];
-    setEntries(updated);
-    await saveData("wc2026:entries", updated);
+    await addEntry(entry);
+    await loadAll();
   };
 
   const handleAddResult = async (result) => {
-    const updated = [...results, result];
-    setResults(updated);
-    await saveData("wc2026:results", updated);
+    await addResult(result);
+    await loadAll();
   };
 
   const handleClearResults = async () => {
-    setResults([]);
-    await saveData("wc2026:results", []);
+    await deleteAllResults();
+    await loadAll();
   };
 
   if (loading) return (
@@ -667,24 +689,18 @@ export default function App() {
     <div style={{ background: "#0e0b07", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", color: "#f0e6d3" }}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
 
-      {/* Header */}
       <div style={{
         background: "linear-gradient(180deg, #1a1008 0%, #0e0b07 100%)",
-        borderBottom: "1px solid #ffffff11", padding: "28px 24px 20px",
-        textAlign: "center"
+        borderBottom: "1px solid #ffffff11", padding: "28px 24px 20px", textAlign: "center"
       }}>
         <div style={{ fontSize: 36, marginBottom: 4 }}>🏆</div>
-        <h1 style={{
-          fontFamily: "'Playfair Display', serif", fontSize: 28,
-          color: "#f59e0b", margin: "0 0 4px", letterSpacing: "-0.01em"
-        }}>FIFA World Cup 2026</h1>
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, color: "#f59e0b", margin: "0 0 4px" }}>FIFA World Cup 2026</h1>
         <p style={{ color: "#a89880", fontSize: 13, margin: 0 }}>Pick 10 teams · 3 strikers · May the best punter win</p>
       </div>
 
-      {/* Nav */}
       <div style={{ display: "flex", borderBottom: "1px solid #ffffff11", overflowX: "auto" }}>
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
+          <button key={t} onClick={() => { setTab(t); loadAll(); }} style={{
             flex: 1, padding: "14px 8px", background: "none",
             border: "none", borderBottom: `2px solid ${tab === t ? "#f59e0b" : "transparent"}`,
             color: tab === t ? "#f59e0b" : "#6b7280", fontSize: 13,
@@ -693,13 +709,11 @@ export default function App() {
         ))}
       </div>
 
-      {/* Rules pill */}
       {tab === "Enter" && (
         <div style={{ maxWidth: 680, margin: "20px auto 0", padding: "0 16px" }}>
           <div style={{
             background: "#f59e0b0d", border: "1px solid #f59e0b22",
-            borderRadius: 10, padding: "12px 16px", fontSize: 12, color: "#a89880",
-            lineHeight: 1.7
+            borderRadius: 10, padding: "12px 16px", fontSize: 12, color: "#a89880", lineHeight: 1.7
           }}>
             <strong style={{ color: "#f59e0b" }}>Rules:</strong> Rank 10 teams (max 5 from any confederation).
             Each win scores <strong style={{ color: "#f0e6d3" }}>(11−rank) × stage multiplier</strong> · draws score half.
@@ -718,3 +732,4 @@ export default function App() {
     </div>
   );
 }
+// updated
