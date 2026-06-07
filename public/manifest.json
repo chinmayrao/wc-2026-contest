@@ -1,11 +1,11 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "WC 2026",
+  "name": "FIFA WC2026 contest",
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png"
     },
     {
       "src": "logo192.png",
