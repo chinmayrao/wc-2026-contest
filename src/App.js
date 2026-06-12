@@ -31,8 +31,10 @@ const FD_TOKEN = "de14cffc719346ad8522827869bfcbcb";
 const FD_BASE = "https://api.football-data.org/v4";
 
 async function fdFetch(path) {
-  const res = await fetch(`/api/sync`);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const res = await fetch(`${FD_BASE}${path}`, {
+    headers: { "X-Auth-Token": FD_TOKEN }
+  });
+  if (!res.ok) throw new Error(`FD API error: ${res.status}`);
   return res.json();
 }
 
@@ -93,13 +95,15 @@ function matchScorerName(apiName, ourStrikers) {
 }
 
 async function syncFromAPI(allEntries) {
+  // Fetch existing goal events first — preserve them across sync
+  const existingResults = await getResults();
+  const existingGoals = existingResults.filter(r => r.type === "goal");
+
   // Fetch all WC matches
   const data = await fdFetch("/competitions/WC/matches?status=FINISHED");
   const matches = data.matches || [];
 
-  const allPickedStrikers = [...new Set(allEntries.flatMap(e => e.strikers))];
   const newResults = [];
-  const scorerGoals = {}; // strikerName -> total goals
 
   for (const match of matches) {
     const stage = mapStage(match.stage);
@@ -122,31 +126,20 @@ async function syncFromAPI(allEntries) {
         result: awayScore > homeScore ? "W" : homeScore === awayScore ? "D" : "L"
       });
     }
-
-    // Goalscorers
-    const goals = match.goals || [];
-    for (const goal of goals) {
-      if (goal.type === "OWN_GOAL") continue;
-      const scorerName = goal.scorer?.name;
-      const matched = matchScorerName(scorerName, allPickedStrikers);
-      if (matched) {
-        scorerGoals[matched] = (scorerGoals[matched] || 0) + 1;
-      }
-    }
   }
 
-  // Add goal events
-  for (const [player, goals] of Object.entries(scorerGoals)) {
-    newResults.push({ type: "goal", player, goals, stage: "tournament" });
-  }
-
-  // Replace all results in Supabase
+  // Replace only match results, keep existing goal events
   await deleteAllResults();
   for (const r of newResults) {
     await addResult(r);
   }
+  // Re-add preserved goal events
+  for (const g of existingGoals) {
+    const { id, created_at, ...goalData } = g;
+    await addResult(goalData);
+  }
 
-  return { matchCount: matches.length, resultCount: newResults.length };
+  return { matchCount: matches.length, resultCount: newResults.length + existingGoals.length };
 }
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
