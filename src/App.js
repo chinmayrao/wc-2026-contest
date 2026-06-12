@@ -31,10 +31,8 @@ const FD_TOKEN = "de14cffc719346ad8522827869bfcbcb";
 const FD_BASE = "https://api.football-data.org/v4";
 
 async function fdFetch(path) {
-  const res = await fetch(`${FD_BASE}${path}`, {
-    headers: { "X-Auth-Token": FD_TOKEN }
-  });
-  if (!res.ok) throw new Error(`FD API error: ${res.status}`);
+  const res = await fetch(`/api/sync`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
 
