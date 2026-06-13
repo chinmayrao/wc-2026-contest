@@ -297,6 +297,8 @@ function Badge({ conf }) {
 // ─── ENTRY FORM ──────────────────────────────────────────────────────────────
 
 function EntryForm({ onSubmit }) {
+  const [pw, setPw] = useState("");
+  const [auth, setAuth] = useState(false);
   const [name, setName] = useState("");
   const [teams, setTeams] = useState(Array(10).fill(""));
   const [strikers, setStrikers] = useState(["", "", ""]);
@@ -347,6 +349,18 @@ function EntryForm({ onSubmit }) {
 
   const counts = confCount(teams);
   const usedStrikerConfs = strikers.filter(Boolean).map((s) => STRIKERS.find((x) => x.name === s)?.confederation);
+
+  if (!auth) return (
+    <div style={{ maxWidth: 400, margin: "0 auto", padding: "40px 16px" }}>
+      <div style={{ background: "#f59e0b0d", border: "1px solid #f59e0b22", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#a89880", marginBottom: 20 }}>
+        The entry deadline has passed. If you have a late entry code, enter it below.
+      </div>
+      <label style={labelStyle}>Entry Code</label>
+      <input type="password" value={pw} onChange={e => setPw(e.target.value)}
+        style={inputStyle} placeholder="Enter code" />
+      <button onClick={() => { if (pw === "late_entry") setAuth(true); }} style={btnStyle}>Submit Entry</button>
+    </div>
+  );
 
   if (submitted) return (
     <div style={{ textAlign: "center", padding: "60px 20px" }}>
@@ -639,15 +653,6 @@ function AdminPanel({ results, onAddResult, onClearResults, entries, onSync }) {
 // ─── ENTRIES LIST ─────────────────────────────────────────────────────────────
 
 function EntriesList({ entries }) {
-  const [pw, setPw] = useState("");
-  const [auth, setAuth] = useState(false);
-  if (!auth) return (
-    <div style={{ maxWidth: 400, margin: "0 auto", padding: "40px 16px" }}>
-      <label style={labelStyle}>Admin Password</label>
-      <input type="password" value={pw} onChange={e => setPw(e.target.value)} style={inputStyle} placeholder="Enter password" />
-      <button onClick={() => { if (pw === "wc2026admin") setAuth(true); }} style={btnStyle}>Unlock</button>
-    </div>
-  );
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px 40px" }}>
       <div style={{ color: "#a89880", fontSize: 13, marginBottom: 16 }}>{entries.length} entries submitted</div>
@@ -693,7 +698,7 @@ const tabBtnStyle = { padding: "8px 16px", borderRadius: 6, border: "none", curs
 const TABS = ["Enter", "Leaderboard", "Entries", "Admin"];
 
 export default function App() {
-  const [tab, setTab] = useState("Enter");
+  const [tab, setTab] = useState("Leaderboard");
   const [entries, setEntries] = useState([]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
