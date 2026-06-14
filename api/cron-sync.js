@@ -79,6 +79,7 @@ export default async function handler(req, res) {
         "Czechia": "Czech Republic",
         "Curaçao": "Curacao",
         "Congo DR": "DR Congo",
+        "Democratic Republic of the Congo": "DR Congo",
         "Cape Verde Islands": "Cape Verde",
         "IR Iran": "Iran",
       };

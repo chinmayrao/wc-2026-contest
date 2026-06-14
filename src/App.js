@@ -53,6 +53,7 @@ const TEAM_NAME_MAP = {
   "Morocco": "Morocco", "Senegal": "Senegal", "Nigeria": "Nigeria",
   "Egypt": "Egypt", "Mali": "Mali", "Algeria": "Algeria", "Tunisia": "Tunisia",
   "DR Congo": "DR Congo", "Congo DR": "DR Congo",
+        "Democratic Republic of the Congo": "DR Congo",
   "Cape Verde": "Cape Verde", "Cape Verde Islands": "Cape Verde",
   "South Africa": "South Africa",
   "Japan": "Japan", "Korea Republic": "South Korea", "South Korea": "South Korea",
@@ -169,6 +170,7 @@ async function syncFromAPI(allEntries) {
       "Czechia": "Czech Republic",
       "Curaçao": "Curacao",
       "Congo DR": "DR Congo",
+        "Democratic Republic of the Congo": "DR Congo",
       "Cape Verde Islands": "Cape Verde",
       "IR Iran": "Iran",
     };
