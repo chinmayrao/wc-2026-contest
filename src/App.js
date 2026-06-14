@@ -93,51 +93,104 @@ function matchScorerName(apiName, ourStrikers) {
 }
 
 async function syncFromAPI(allEntries) {
-  // Fetch existing goal events first — preserve them across sync
-  const existingResults = await getResults();
-  const existingGoals = existingResults.filter(r => r.type === "goal");
+  // Fetch from worldcup26.ir — has both match results AND goalscorers
+  const res = await fetch("https://worldcup26.ir/get/games");
+  if (!res.ok) throw new Error(`worldcup26.ir API error: ${res.status}`);
+  const data = await res.json();
+  const games = (data.games || []).filter(g => g.finished === "TRUE");
 
-  // Fetch all WC matches
-  const data = await fdFetch("/competitions/WC/matches?status=FINISHED");
-  const matches = data.matches || [];
+  const allPickedStrikers = [...new Set(allEntries.flatMap(e => e.strikers))];
 
-  const newResults = [];
+  // Determine stage from "type" field (group/round of 16/QF etc.) and matchday
+  function getStage(game) {
+    const t = (game.type || "").toLowerCase();
+    if (t === "group") return "Group";
+    if (t.includes("32")) return "R32";
+    if (t.includes("16")) return "R16";
+    if (t.includes("quarter")) return "QF";
+    if (t.includes("semi")) return "SF";
+    if (t.includes("final") && !t.includes("semi")) return "Final";
+    return "Group"; // default
+  }
 
-  for (const match of matches) {
-    const stage = mapStage(match.stage);
-    if (!stage) continue;
+  // Parse scorers string like {"J. Quiñones 9'","R. Jiménez 67'"} or {“J. Quiñones 9'”,”R. Jiménez 67'”}
+  function parseScorers(str) {
+    if (!str || str === "null") return [];
+    // Strip outer braces, normalize quotes
+    const cleaned = str.replace(/^\{|\}$/g, "").replace(/[""]/g, '"').replace(/['']/g, "'");
+    // Match anything in quotes
+    const matches = cleaned.match(/"([^"]+)"/g) || [];
+    return matches.map(m => m.replace(/"/g, ""));
+  }
 
-    const homeTeam = TEAM_NAME_MAP[match.homeTeam?.name] || match.homeTeam?.name;
-    const awayTeam = TEAM_NAME_MAP[match.awayTeam?.name] || match.awayTeam?.name;
-    const homeScore = match.score?.fullTime?.home ?? 0;
-    const awayScore = match.score?.fullTime?.away ?? 0;
+  // Match scorer name to picked strikers (last name match)
+  function matchScorer(scorerEntry) {
+    if (!scorerEntry) return null;
+    // Skip own goals
+    if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
+    // Extract name (strip minute and any annotations)
+    const nameOnly = scorerEntry.replace(/\d+'.*$/, "").replace(/\([^)]*\)/g, "").trim();
+    const lower = nameOnly.toLowerCase();
 
-    if (homeTeam) {
-      newResults.push({
-        type: "match", team: homeTeam, stage,
-        result: homeScore > awayScore ? "W" : homeScore === awayScore ? "D" : "L"
+    // Try exact match
+    const exact = allPickedStrikers.find(s => s.toLowerCase() === lower);
+    if (exact) return exact;
+
+    // Last name match (handles "K. Mbappé" → "Kylian Mbappé")
+    const lastName = lower.split(/\s+/).pop();
+    if (lastName.length > 2) {
+      const lastMatch = allPickedStrikers.find(s => {
+        const sLast = s.toLowerCase().split(/\s+/).pop();
+        return sLast === lastName;
       });
+      if (lastMatch) return lastMatch;
     }
-    if (awayTeam) {
-      newResults.push({
-        type: "match", team: awayTeam, stage,
-        result: awayScore > homeScore ? "W" : homeScore === awayScore ? "D" : "L"
-      });
+
+    return null;
+  }
+
+  const newMatchResults = [];
+  const scorerGoals = {};
+
+  for (const game of games) {
+    const stage = getStage(game);
+    const home = game.home_team_name_en;
+    const away = game.away_team_name_en;
+    const hScore = parseInt(game.home_score || "0");
+    const aScore = parseInt(game.away_score || "0");
+
+    // Home team result
+    newMatchResults.push({
+      type: "match", team: home, stage,
+      result: hScore > aScore ? "W" : hScore === aScore ? "D" : "L"
+    });
+    // Away team result
+    newMatchResults.push({
+      type: "match", team: away, stage,
+      result: aScore > hScore ? "W" : hScore === aScore ? "D" : "L"
+    });
+
+    // Process scorers
+    const homeScorers = parseScorers(game.home_scorers);
+    const awayScorers = parseScorers(game.away_scorers);
+    for (const s of [...homeScorers, ...awayScorers]) {
+      const matched = matchScorer(s);
+      if (matched) scorerGoals[matched] = (scorerGoals[matched] || 0) + 1;
     }
   }
 
-  // Replace only match results, keep existing goal events
+  // Build goal events from scorer counts
+  const newGoalResults = Object.entries(scorerGoals).map(([player, goals]) => ({
+    type: "goal", player, goals, stage: "tournament"
+  }));
+
+  // Replace all results in Supabase
   await deleteAllResults();
-  for (const r of newResults) {
+  for (const r of [...newMatchResults, ...newGoalResults]) {
     await addResult(r);
   }
-  // Re-add preserved goal events
-  for (const g of existingGoals) {
-    const { id, created_at, ...goalData } = g;
-    await addResult(goalData);
-  }
 
-  return { matchCount: matches.length, resultCount: newResults.length + existingGoals.length };
+  return { matchCount: games.length, resultCount: newMatchResults.length + newGoalResults.length };
 }
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
