@@ -162,8 +162,18 @@ async function syncFromAPI(allEntries) {
 
   for (const game of games) {
     const stage = getStage(game);
-    const home = game.home_team_name_en;
-    const away = game.away_team_name_en;
+    const TEAM_NAME_FIX = {
+      "United States": "USA",
+      "Korea Republic": "South Korea",
+      "Türkiye": "Turkey",
+      "Czechia": "Czech Republic",
+      "Curaçao": "Curacao",
+      "Congo DR": "DR Congo",
+      "Cape Verde Islands": "Cape Verde",
+      "IR Iran": "Iran",
+    };
+    const home = TEAM_NAME_FIX[game.home_team_name_en] || game.home_team_name_en;
+    const away = TEAM_NAME_FIX[game.away_team_name_en] || game.away_team_name_en;
     const hScore = parseInt(game.home_score || "0");
     const aScore = parseInt(game.away_score || "0");
 
