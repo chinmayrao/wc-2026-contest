@@ -624,9 +624,10 @@ function AdminPanel({ results, onAddResult, onClearResults, entries, onSync }) {
       {tab === "sync" && (
         <div>
           <div style={{ background: "#ffffff08", border: "1px solid #ffffff11", borderRadius: 12, padding: "20px", marginBottom: 20 }}>
-            <div style={{ color: "#f0e6d3", fontWeight: 700, marginBottom: 8 }}>Auto-sync from football-data.org</div>
+            <div style={{ color: "#f0e6d3", fontWeight: 700, marginBottom: 8 }}>Auto-sync from worldcup26.ir</div>
             <div style={{ color: "#a89880", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-              Fetches all completed WC matches, calculates W/D/L per team per stage, and counts goals for your picked strikers. Replaces all existing results.
+              Fetches completed matches and goalscorers, calculates W/D/L per team per stage, and counts goals for your picked strikers. Replaces all existing results.<br/><br/>
+              <strong style={{ color: "#f0e6d3" }}>Scheduled sync:</strong> Runs automatically every 30 min via cron-job.org. Last result count below.
             </div>
             <button onClick={handleSync} disabled={syncing} style={{ ...btnStyle, opacity: syncing ? 0.7 : 1 }}>
               {syncing ? "Syncing…" : "🔄 Sync Results Now"}
