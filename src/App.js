@@ -117,14 +117,22 @@ async function syncFromAPI(allEntries) {
   function parseScorers(str) {
     if (!str || str === "null") return [];
     // Strip outer braces, normalize quotes
-    const cleaned = str.replace(/^\{|\}$/g, "").replace(/[""]/g, '"').replace(/['']/g, "'");
+    const cleaned = str.replace(/^\{|\}$/g, "").replace(/[\u201c\u201d\u2018\u2019]/g, '"');
     // Match anything in quotes
     const matches = cleaned.match(/"([^"]+)"/g) || [];
     return matches.map(m => m.replace(/"/g, ""));
   }
 
   // Match scorer name to picked strikers (last name match)
-  function matchScorer(scorerEntry) {
+  // API name → our striker name overrides (for cases where last-name match fails)
+    const STRIKER_API_ALIASES = {
+      "v. júnior": "Vinicius Jr",
+      "vinicius júnior": "Vinicius Jr",
+      "vinícius júnior": "Vinicius Jr",
+      "v. jr": "Vinicius Jr",
+    };
+
+    function matchScorer(scorerEntry) {
     if (!scorerEntry) return null;
     // Skip own goals
     if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;

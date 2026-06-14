@@ -32,16 +32,28 @@ export default async function handler(req, res) {
 
     function parseScorers(str) {
       if (!str || str === "null") return [];
-      const cleaned = str.replace(/^\{|\}$/g, "").replace(/[""]/g, '"').replace(/['']/g, "'");
+      const cleaned = str.replace(/^\{|\}$/g, "").replace(/[\u201c\u201d\u2018\u2019]/g, '"');
       const matches = cleaned.match(/"([^"]+)"/g) || [];
       return matches.map(m => m.replace(/"/g, ""));
     }
+
+    // API name → our striker name overrides (for cases where last-name match fails)
+    const STRIKER_API_ALIASES = {
+      "v. júnior": "Vinicius Jr",
+      "vinicius júnior": "Vinicius Jr",
+      "vinícius júnior": "Vinicius Jr",
+      "v. jr": "Vinicius Jr",
+    };
 
     function matchScorer(scorerEntry) {
       if (!scorerEntry) return null;
       if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
       const nameOnly = scorerEntry.replace(/\d+'.*$/, "").replace(/\([^)]*\)/g, "").trim();
       const lower = nameOnly.toLowerCase();
+      // Check aliases first
+      if (STRIKER_API_ALIASES[lower] && allPickedStrikers.includes(STRIKER_API_ALIASES[lower])) {
+        return STRIKER_API_ALIASES[lower];
+      }
       const exact = allPickedStrikers.find(s => s.toLowerCase() === lower);
       if (exact) return exact;
       const lastName = lower.split(/\s+/).pop();
