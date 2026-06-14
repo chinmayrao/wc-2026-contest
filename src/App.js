@@ -131,6 +131,14 @@ async function syncFromAPI(allEntries) {
       "vinicius júnior": "Vinicius Jr",
       "vinícius júnior": "Vinicius Jr",
       "v. jr": "Vinicius Jr",
+      "neymar": "Neymar Jr",
+      "neymar jr.": "Neymar Jr",
+      "neymar jr": "Neymar Jr",
+      "neymar da silva": "Neymar Jr",
+      "h. son": "Son Heung-min",
+      "heung-min son": "Son Heung-min",
+      "son heung min": "Son Heung-min",
+      "h.m. son": "Son Heung-min",
     };
 
     function matchScorer(scorerEntry) {
