@@ -111,15 +111,21 @@ export default async function handler(req, res) {
       type: "goal", player, goals, stage: "tournament"
     }));
 
+    // Safety check: only replace if we got real data
+    const allNew = [...newMatchResults, ...newGoalResults];
+    if (allNew.length === 0 && games.length === 0) {
+      return res.status(200).json({ ok: false, error: "API returned no data — keeping existing results" });
+    }
+
     // Delete all existing results
     await fetch(`${SUPABASE_URL}/rest/v1/results?id=gte.0`, { method: "DELETE", headers: SUPA_HEADERS });
 
     // Insert new results
-    for (const r of [...newMatchResults, ...newGoalResults]) {
+    for (const r of allNew) {
       await fetch(`${SUPABASE_URL}/rest/v1/results`, { method: "POST", headers: SUPA_HEADERS, body: JSON.stringify(r) });
     }
 
-    res.status(200).json({ ok: true, games: games.length, results: newMatchResults.length + newGoalResults.length, scorers: Object.keys(scorerGoals) });
+    res.status(200).json({ ok: true, games: games.length, results: allNew.length, scorers: Object.keys(scorerGoals) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

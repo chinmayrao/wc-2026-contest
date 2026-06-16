@@ -212,13 +212,19 @@ async function syncFromAPI(allEntries) {
     type: "goal", player, goals, stage: "tournament"
   }));
 
+  // Safety check: only replace if we got real data
+  const allNew = [...newMatchResults, ...newGoalResults];
+  if (allNew.length === 0 && games.length === 0) {
+    throw new Error("API returned no data — keeping existing results");
+  }
+
   // Replace all results in Supabase
   await deleteAllResults();
-  for (const r of [...newMatchResults, ...newGoalResults]) {
+  for (const r of allNew) {
     await addResult(r);
   }
 
-  return { matchCount: games.length, resultCount: newMatchResults.length + newGoalResults.length };
+  return { matchCount: games.length, resultCount: allNew.length };
 }
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
