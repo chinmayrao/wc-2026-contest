@@ -51,6 +51,10 @@ export default async function handler(req, res) {
       "heung-min son": "Son Heung-min",
       "son heung min": "Son Heung-min",
       "h.m. son": "Son Heung-min",
+      "arling halnd": "Erling Haaland",
+      "e. haaland": "Erling Haaland",
+      "e. håland": "Erling Haaland",
+      "erling halnd": "Erling Haaland",
     };
 
     function matchScorer(scorerEntry) {
