@@ -55,6 +55,9 @@ export default async function handler(req, res) {
       "e. haaland": "Erling Haaland",
       "e. håland": "Erling Haaland",
       "erling halnd": "Erling Haaland",
+      "livnl msi": "Lionel Messi",
+      "l. messi": "Lionel Messi",
+      "leo messi": "Lionel Messi",
     };
 
     function matchScorer(scorerEntry) {
