@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     function matchScorer(scorerEntry) {
       if (!scorerEntry) return null;
       if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
-      const nameOnly = scorerEntry.replace(/\d+'.*$/, "").replace(/\([^)]*\)/g, "").trim();
+      const nameOnly = scorerEntry.replace(/\s+\d+[\+\d]*'.*$/, "").replace(/\([^)]*\)/g, "").trim();
       const lower = nameOnly.toLowerCase();
       // Check aliases first
       if (STRIKER_API_ALIASES[lower] && allPickedStrikers.includes(STRIKER_API_ALIASES[lower])) {

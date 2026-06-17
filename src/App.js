@@ -146,7 +146,7 @@ async function syncFromAPI(allEntries) {
     // Skip own goals
     if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
     // Extract name (strip minute and any annotations)
-    const nameOnly = scorerEntry.replace(/\d+'.*$/, "").replace(/\([^)]*\)/g, "").trim();
+    const nameOnly = scorerEntry.replace(/\s+\d+[\+\d]*'.*$/, "").replace(/\([^)]*\)/g, "").trim();
     const lower = nameOnly.toLowerCase();
 
     // Try exact match
