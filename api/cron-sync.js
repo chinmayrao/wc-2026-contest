@@ -125,7 +125,18 @@ export default async function handler(req, res) {
       await fetch(`${SUPABASE_URL}/rest/v1/results`, { method: "POST", headers: SUPA_HEADERS, body: JSON.stringify(r) });
     }
 
-    res.status(200).json({ ok: true, games: games.length, results: allNew.length, scorers: Object.keys(scorerGoals) });
+    // Debug: show parsed scorers per game for France
+    const debug = [];
+    for (const game of games) {
+      const hs = parseScorers(game.home_scorers);
+      const as2 = parseScorers(game.away_scorers);
+      if (hs.length > 0 || as2.length > 0) {
+        const matched = [...hs, ...as2].map(s => ({ raw: s, match: matchScorer(s) }));
+        debug.push({ match: game.home_team_name_en + " vs " + game.away_team_name_en, scorers: matched });
+      }
+    }
+
+    res.status(200).json({ ok: true, games: games.length, results: allNew.length, scorers: scorerGoals, debug });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
