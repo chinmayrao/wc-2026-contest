@@ -112,7 +112,7 @@ export default async function handler(req, res) {
         const strikerLast = normalize(s).split(/\s+/).pop() || "";
         const lastSim = (scorerLast.length > 2 && strikerLast.length > 2) ? stringSimilarity(scorerLast, strikerLast) : 0;
         // Require both full name similarity >= 0.5 AND last name similarity >= 0.5
-        if (fullSim >= 0.5 && lastSim >= 0.5 && (fullSim + lastSim) > bestScore) {
+        if (fullSim >= 0.55 && lastSim >= 0.6 && (fullSim + lastSim) > bestScore) {
           bestScore = fullSim + lastSim;
           bestMatch = s;
         }
