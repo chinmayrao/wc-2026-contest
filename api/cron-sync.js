@@ -37,6 +37,31 @@ export default async function handler(req, res) {
       return matches.map(m => m.replace(/"/g, ""));
     }
 
+    // Fuzzy matching for misspelled scorer names
+    function normalize(s) {
+      return s.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[.\']/g, "")
+        .replace(/\s+/g, " ").trim();
+    }
+
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array(m+1).fill(null).map(() => Array(n+1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+      return dp[m][n];
+    }
+
+    function stringSimilarity(a, b) {
+      const na = normalize(a), nb = normalize(b);
+      const dist = levenshtein(na, nb);
+      return 1 - dist / Math.max(na.length, nb.length);
+    }
+
     // API name → our striker name overrides (for cases where last-name match fails)
     const STRIKER_API_ALIASES = {
       "v. júnior": "Vinicius Jr",
@@ -79,6 +104,21 @@ export default async function handler(req, res) {
         });
         if (lastMatch) return lastMatch;
       }
+      // Fuzzy match as last resort — use both full name AND last name to avoid false positives
+      let bestMatch = null, bestScore = 0;
+      for (const s of allPickedStrikers) {
+        const fullSim = stringSimilarity(nameOnly, s);
+        const scorerLast = normalize(nameOnly).split(/\s+/).pop() || "";
+        const strikerLast = normalize(s).split(/\s+/).pop() || "";
+        const lastSim = (scorerLast.length > 2 && strikerLast.length > 2) ? stringSimilarity(scorerLast, strikerLast) : 0;
+        // Require both full name similarity >= 0.5 AND last name similarity >= 0.5
+        if (fullSim >= 0.5 && lastSim >= 0.5 && (fullSim + lastSim) > bestScore) {
+          bestScore = fullSim + lastSim;
+          bestMatch = s;
+        }
+      }
+      if (bestMatch) return bestMatch;
+
       return null;
     }
 
@@ -147,4 +187,4 @@ export default async function handler(req, res) {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
-}// messi fix
+}

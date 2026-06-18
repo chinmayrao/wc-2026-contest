@@ -125,7 +125,32 @@ async function syncFromAPI(allEntries) {
   }
 
   // Match scorer name to picked strikers (last name match)
-  // API name → our striker name overrides (for cases where last-name match fails)
+  // Fuzzy matching for misspelled scorer names
+    function normalize(s) {
+      return s.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[.\']/g, "")
+        .replace(/\s+/g, " ").trim();
+    }
+
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array(m+1).fill(null).map(() => Array(n+1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+      return dp[m][n];
+    }
+
+    function stringSimilarity(a, b) {
+      const na = normalize(a), nb = normalize(b);
+      const dist = levenshtein(na, nb);
+      return 1 - dist / Math.max(na.length, nb.length);
+    }
+
+    // API name → our striker name overrides (for cases where last-name match fails)
     const STRIKER_API_ALIASES = {
       "v. júnior": "Vinicius Jr",
       "vinicius júnior": "Vinicius Jr",
@@ -724,23 +749,42 @@ function AdminPanel({ results, onAddResult, onClearResults, entries, onSync }) {
         </div>
       )}
 
-      {tab === "log" && (
+      {tab === "log" && (() => {
+        const goalResults = results.filter(r => r.type === "goal").sort((a, b) => (b.goals || 0) - (a.goals || 0));
+        const matchResults = results.filter(r => r.type === "match");
+        const wins = matchResults.filter(r => r.result === "W").length;
+        const draws = matchResults.filter(r => r.result === "D").length;
+        const losses = matchResults.filter(r => r.result === "L").length;
+        return (
         <div>
           <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "#a89880", fontSize: 13 }}>{results.length} result(s)</span>
+            <span style={{ color: "#a89880", fontSize: 13 }}>{matchResults.length / 2 | 0} matches · {goalResults.length} scorers</span>
             <button onClick={onClearResults} style={{ ...tabBtnStyle, color: "#ef4444", background: "#ef444411" }}>Clear All</button>
           </div>
+
+          {goalResults.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>⚽ Goal Scorers (picked strikers only)</div>
+              {goalResults.map((r, i) => (
+                <div key={i} style={{ background: "#f59e0b11", border: "1px solid #f59e0b33", borderRadius: 8, padding: "10px 14px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: "#f0e6d3", fontWeight: 600, fontSize: 14 }}>{r.player}</span>
+                  <span style={{ color: "#f59e0b", fontWeight: 800, fontSize: 18 }}>{r.goals} ⚽</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ color: "#a89880", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Match Results ({wins}W · {draws}D · {losses}L)</div>
           {results.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>No results yet.</div>}
-          {results.map((r, i) => (
-            <div key={r.id || i} style={{ background: "#ffffff08", border: "1px solid #ffffff11", borderRadius: 8, padding: "8px 12px", marginBottom: 8, fontSize: 13, color: "#a89880" }}>
-              {r.type === "match"
-                ? <span><strong style={{ color: "#f0e6d3" }}>{r.team}</strong> · {r.stage} · <span style={{ color: r.result === "W" ? "#10b981" : r.result === "D" ? "#f59e0b" : "#ef4444" }}>{r.result}</span></span>
-                : <span><strong style={{ color: "#f0e6d3" }}>{r.player}</strong> · {r.goals} goal{r.goals > 1 ? "s" : ""}</span>
-              }
+          {matchResults.map((r, i) => (
+            <div key={r.id || i} style={{ background: "#ffffff08", border: "1px solid #ffffff11", borderRadius: 8, padding: "8px 12px", marginBottom: 4, fontSize: 13, color: "#a89880", display: "flex", justifyContent: "space-between" }}>
+              <strong style={{ color: "#f0e6d3" }}>{r.team}</strong>
+              <span><span style={{ color: "#6b7280" }}>{r.stage}</span> · <span style={{ color: r.result === "W" ? "#10b981" : r.result === "D" ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>{r.result}</span></span>
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
