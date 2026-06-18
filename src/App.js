@@ -587,11 +587,57 @@ function EntryForm({ onSubmit }) {
 // ─── LEADERBOARD ─────────────────────────────────────────────────────────────
 
 function Leaderboard({ entries, results }) {
+  const [view, setView] = useState("table");
   const scored = computeScores(entries, results).sort((a, b) => b.total - a.total || tiebreak(a, b, results));
   if (!scored.length) return <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>No entries yet. Share the link!</div>;
+
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px 40px" }}>
-      {scored.map((entry, idx) => (
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 16 }}>
+        {["table", "cards"].map(v => (
+          <button key={v} onClick={() => setView(v)} style={{
+            padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer",
+            fontSize: 12, fontWeight: 600,
+            background: view === v ? "#f59e0b" : "#ffffff11",
+            color: view === v ? "#1a1008" : "#a89880"
+          }}>{v === "table" ? "📊 Table" : "🃏 Cards"}</button>
+        ))}
+      </div>
+
+      {view === "table" && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #C9A84C33" }}>
+                <th style={{ textAlign: "left", padding: "8px 6px", color: "#C9A84C", fontSize: 10, letterSpacing: "0.08em" }}>#</th>
+                <th style={{ textAlign: "left", padding: "8px 6px", color: "#C9A84C", fontSize: 10, letterSpacing: "0.08em" }}>NAME</th>
+                <th style={{ textAlign: "right", padding: "8px 6px", color: "#C9A84C", fontSize: 10, letterSpacing: "0.08em" }}>TEAMS</th>
+                <th style={{ textAlign: "right", padding: "8px 6px", color: "#C9A84C", fontSize: 10, letterSpacing: "0.08em" }}>⚽</th>
+                <th style={{ textAlign: "right", padding: "8px 6px", color: "#C9A84C", fontSize: 10, letterSpacing: "0.08em", fontWeight: 800 }}>TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scored.map((entry, idx) => {
+                const isTop3 = idx < 3;
+                return (
+                  <tr key={entry.id} style={{
+                    borderBottom: "1px solid #ffffff0a",
+                    background: isTop3 ? "#C9A84C11" : (idx % 2 === 0 ? "#ffffff05" : "transparent"),
+                  }}>
+                    <td style={{ padding: "6px", color: isTop3 ? "#C9A84C" : (idx < 10 ? "#a89880" : "#6b7280"), fontWeight: 600, fontSize: 12, borderLeft: isTop3 ? "2px solid #C9A84C" : "2px solid transparent" }}>{idx + 1}</td>
+                    <td style={{ padding: "6px", color: isTop3 ? "#C9A84C" : "#f0e6d3", fontWeight: isTop3 ? 700 : 500, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</td>
+                    <td style={{ padding: "6px", textAlign: "right", color: "#a89880" }}>{entry.teamPts.toFixed(1)}</td>
+                    <td style={{ padding: "6px", textAlign: "right", color: entry.playerPts > 0 ? "#f59e0b" : "#6b7280" }}>{entry.playerPts}</td>
+                    <td style={{ padding: "6px", textAlign: "right", color: isTop3 ? "#C9A84C" : "#f0e6d3", fontWeight: 700, fontSize: 14 }}>{entry.total.toFixed(1)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view === "cards" && scored.map((entry, idx) => (
         <div key={entry.id} style={{
           background: idx === 0 ? "linear-gradient(135deg, #92400e22, #78350f11)" : "#ffffff08",
           border: `1px solid ${idx === 0 ? "#f59e0b44" : "#ffffff11"}`,
