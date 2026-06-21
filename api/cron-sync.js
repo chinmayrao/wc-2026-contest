@@ -131,6 +131,10 @@ export default async function handler(req, res) {
       return null;
     }
 
+    // Fetch existing goals from Supabase as backup
+    const existingGoalsRes = await fetch(`${SUPABASE_URL}/rest/v1/results?type=eq.goal&select=*`, { headers: SUPA_HEADERS });
+    const existingGoals = await existingGoalsRes.json();
+
     let scorerSource = "none";
     const scorerGoals = {};
     const debug = [];
@@ -155,6 +159,12 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       scorerSource = "failed: " + e.message;
+      // Preserve existing goal data from Supabase
+      for (const g of existingGoals) {
+        if (g.player && g.goals) {
+          scorerGoals[g.player] = g.goals;
+        }
+      }
     }
 
     const newGoalResults = Object.entries(scorerGoals).map(([player, goals]) => ({
@@ -185,4 +195,4 @@ export default async function handler(req, res) {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
-}// ueda fix
+}
