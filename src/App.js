@@ -94,169 +94,13 @@ function matchScorerName(apiName, ourStrikers) {
 }
 
 async function syncFromAPI(allEntries) {
-  // Fetch from worldcup26.ir — has both match results AND goalscorers
-  const res = await fetch("https://worldcup26.ir/get/games");
-  if (!res.ok) throw new Error(`worldcup26.ir API error: ${res.status}`);
+  // Call the server-side cron endpoint which uses hybrid approach:
+  // football-data.org for match results + worldcup26.ir for scorers
+  const res = await fetch("/api/cron-sync");
+  if (!res.ok) throw new Error("Sync failed: " + res.status);
   const data = await res.json();
-  const games = (data.games || []).filter(g => g.finished === "TRUE");
-
-  const allPickedStrikers = [...new Set(allEntries.flatMap(e => e.strikers))];
-
-  // Determine stage from "type" field (group/round of 16/QF etc.) and matchday
-  function getStage(game) {
-    const t = (game.type || "").toLowerCase();
-    if (t === "group") return "Group";
-    if (t.includes("32")) return "R32";
-    if (t.includes("16")) return "R16";
-    if (t.includes("quarter")) return "QF";
-    if (t.includes("semi")) return "SF";
-    if (t.includes("final") && !t.includes("semi")) return "Final";
-    return "Group"; // default
-  }
-
-  // Parse scorers string like {"J. Quiñones 9'","R. Jiménez 67'"} or {“J. Quiñones 9'”,”R. Jiménez 67'”}
-  function parseScorers(str) {
-    if (!str || str === "null") return [];
-    // Strip outer braces, normalize quotes
-    const cleaned = str.replace(/^\{|\}$/g, "").replace(/[\u201c\u201d\u2018\u2019]/g, '"');
-    // Match anything in quotes
-    const matches = cleaned.match(/"([^"]+)"/g) || [];
-    return matches.map(m => m.replace(/"/g, ""));
-  }
-
-  // Match scorer name to picked strikers (last name match)
-  // Fuzzy matching for misspelled scorer names
-    function normalize(s) {
-      return s.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[.\']/g, "")
-        .replace(/\s+/g, " ").trim();
-    }
-
-    function levenshtein(a, b) {
-      const m = a.length, n = b.length;
-      const dp = Array(m+1).fill(null).map(() => Array(n+1).fill(0));
-      for (let i = 0; i <= m; i++) dp[i][0] = i;
-      for (let j = 0; j <= n; j++) dp[0][j] = j;
-      for (let i = 1; i <= m; i++)
-        for (let j = 1; j <= n; j++)
-          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
-      return dp[m][n];
-    }
-
-    function stringSimilarity(a, b) {
-      const na = normalize(a), nb = normalize(b);
-      const dist = levenshtein(na, nb);
-      return 1 - dist / Math.max(na.length, nb.length);
-    }
-
-    // API name → our striker name overrides (for cases where last-name match fails)
-    const STRIKER_API_ALIASES = {
-      "v. júnior": "Vinicius Jr",
-      "vinicius júnior": "Vinicius Jr",
-      "vinícius júnior": "Vinicius Jr",
-      "v. jr": "Vinicius Jr",
-      "neymar": "Neymar Jr",
-      "neymar jr.": "Neymar Jr",
-      "neymar jr": "Neymar Jr",
-      "neymar da silva": "Neymar Jr",
-      "h. son": "Son Heung-min",
-      "heung-min son": "Son Heung-min",
-      "son heung min": "Son Heung-min",
-      "h.m. son": "Son Heung-min",
-      "arling halnd": "Erling Haaland",
-      "e. haaland": "Erling Haaland",
-      "e. håland": "Erling Haaland",
-      "erling halnd": "Erling Haaland",
-      "livnl msi": "Lionel Messi",
-      "l. messi": "Lionel Messi",
-      "leo messi": "Lionel Messi",
-    };
-
-    function matchScorer(scorerEntry) {
-    if (!scorerEntry) return null;
-    // Skip own goals
-    if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
-    // Extract name (strip minute and any annotations)
-    const nameOnly = scorerEntry.replace(/\s+\d+[\+\d]*'.*$/, "").replace(/\([^)]*\)/g, "").trim();
-    const lower = nameOnly.toLowerCase();
-
-    // Try exact match
-    const exact = allPickedStrikers.find(s => s.toLowerCase() === lower);
-    if (exact) return exact;
-
-    // Last name match (handles "K. Mbappé" → "Kylian Mbappé")
-    const lastName = lower.split(/\s+/).pop();
-    if (lastName.length > 2) {
-      const lastMatch = allPickedStrikers.find(s => {
-        const sLast = s.toLowerCase().split(/\s+/).pop();
-        return sLast === lastName;
-      });
-      if (lastMatch) return lastMatch;
-    }
-
-    return null;
-  }
-
-  const newMatchResults = [];
-  const scorerGoals = {};
-
-  for (const game of games) {
-    const stage = getStage(game);
-    const TEAM_NAME_FIX = {
-      "United States": "USA",
-      "Korea Republic": "South Korea",
-      "Türkiye": "Turkey",
-      "Czechia": "Czech Republic",
-      "Curaçao": "Curacao",
-      "Congo DR": "DR Congo",
-        "Democratic Republic of the Congo": "DR Congo",
-      "Cape Verde Islands": "Cape Verde",
-      "IR Iran": "Iran",
-    };
-    const home = TEAM_NAME_FIX[game.home_team_name_en] || game.home_team_name_en;
-    const away = TEAM_NAME_FIX[game.away_team_name_en] || game.away_team_name_en;
-    const hScore = parseInt(game.home_score || "0");
-    const aScore = parseInt(game.away_score || "0");
-
-    // Home team result
-    newMatchResults.push({
-      type: "match", team: home, stage,
-      result: hScore > aScore ? "W" : hScore === aScore ? "D" : "L"
-    });
-    // Away team result
-    newMatchResults.push({
-      type: "match", team: away, stage,
-      result: aScore > hScore ? "W" : hScore === aScore ? "D" : "L"
-    });
-
-    // Process scorers
-    const homeScorers = parseScorers(game.home_scorers);
-    const awayScorers = parseScorers(game.away_scorers);
-    for (const s of [...homeScorers, ...awayScorers]) {
-      const matched = matchScorer(s);
-      if (matched) scorerGoals[matched] = (scorerGoals[matched] || 0) + 1;
-    }
-  }
-
-  // Build goal events from scorer counts
-  const newGoalResults = Object.entries(scorerGoals).map(([player, goals]) => ({
-    type: "goal", player, goals, stage: "tournament"
-  }));
-
-  // Safety check: only replace if we got real data
-  const allNew = [...newMatchResults, ...newGoalResults];
-  if (allNew.length === 0 && games.length === 0) {
-    throw new Error("API returned no data — keeping existing results");
-  }
-
-  // Replace all results in Supabase
-  await deleteAllResults();
-  for (const r of allNew) {
-    await addResult(r);
-  }
-
-  return { matchCount: games.length, resultCount: allNew.length };
+  if (!data.ok) throw new Error(data.error || "Sync returned error");
+  return { matchCount: data.games, resultCount: data.results };
 }
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
@@ -736,10 +580,10 @@ function AdminPanel({ results, onAddResult, onClearResults, entries, onSync }) {
       {tab === "sync" && (
         <div>
           <div style={{ background: "#ffffff08", border: "1px solid #ffffff11", borderRadius: 12, padding: "20px", marginBottom: 20 }}>
-            <div style={{ color: "#f0e6d3", fontWeight: 700, marginBottom: 8 }}>Auto-sync from worldcup26.ir</div>
+            <div style={{ color: "#f0e6d3", fontWeight: 700, marginBottom: 8 }}>Auto-sync (hybrid)</div>
             <div style={{ color: "#a89880", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-              Fetches completed matches and goalscorers, calculates W/D/L per team per stage, and counts goals for your picked strikers. Replaces all existing results.<br/><br/>
-              <strong style={{ color: "#f0e6d3" }}>Scheduled sync:</strong> Runs automatically every 30 min via cron-job.org. Last result count below.
+              Match results from <strong style={{ color: "#f0e6d3" }}>football-data.org</strong> (reliable). Goalscorers from <strong style={{ color: "#f0e6d3" }}>worldcup26.ir</strong> (fuzzy name matching). Replaces all existing results.<br/><br/>
+              <strong style={{ color: "#f0e6d3" }}>Scheduled sync:</strong> Runs automatically every 30 min via cron-job.org.
             </div>
             <button onClick={handleSync} disabled={syncing} style={{ ...btnStyle, opacity: syncing ? 0.7 : 1 }}>
               {syncing ? "Syncing…" : "🔄 Sync Results Now"}

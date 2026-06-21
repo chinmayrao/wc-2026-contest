@@ -7,28 +7,85 @@ export default async function handler(req, res) {
     "Content-Type": "application/json",
     "Prefer": "return=representation"
   };
+  const FD_TOKEN = "de14cffc719346ad8522827869bfcbcb";
+
+  const TEAM_NAME_FIX = {
+    "United States": "USA", "Korea Republic": "South Korea",
+    "Türkiye": "Turkey", "Turkey": "Turkey",
+    "Czechia": "Czech Republic", "Czech Republic": "Czech Republic",
+    "Curaçao": "Curacao", "Congo DR": "DR Congo",
+    "Democratic Republic of the Congo": "DR Congo",
+    "Cape Verde Islands": "Cape Verde", "IR Iran": "Iran",
+  };
+
+  function mapStage(stage) {
+    if (!stage) return null;
+    const s = stage.toUpperCase();
+    if (s.includes("GROUP")) return "Group";
+    if (s.includes("ROUND_OF_32") || s.includes("LAST_32")) return "R32";
+    if (s.includes("ROUND_OF_16") || s.includes("LAST_16")) return "R16";
+    if (s.includes("QUARTER")) return "QF";
+    if (s.includes("SEMI")) return "SF";
+    if (s.includes("FINAL") && !s.includes("SEMI")) return "Final";
+    return null;
+  }
+
+  // Fuzzy matching helpers
+  function normalize(s) {
+    return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.']/g, "").replace(/\s+/g, " ").trim();
+  }
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array(m+1).fill(null).map(() => Array(n+1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+    return dp[m][n];
+  }
+  function stringSimilarity(a, b) {
+    const na = normalize(a), nb = normalize(b);
+    return 1 - levenshtein(na, nb) / Math.max(na.length, nb.length);
+  }
 
   try {
-    // Fetch games from worldcup26.ir
-    const gamesRes = await fetch("https://worldcup26.ir/get/games");
-    const gamesData = await gamesRes.json();
-    const games = (gamesData.games || []).filter(g => g.finished === "TRUE");
-
-    // Fetch all entries from Supabase to know picked strikers
+    // 1. Fetch entries from Supabase
     const entriesRes = await fetch(`${SUPABASE_URL}/rest/v1/entries?select=*`, { headers: SUPA_HEADERS });
     const entries = await entriesRes.json();
     const allPickedStrikers = [...new Set(entries.flatMap(e => e.strikers || []))];
 
-    function getStage(game) {
-      const t = (game.type || "").toLowerCase();
-      if (t === "group") return "Group";
-      if (t.includes("32")) return "R32";
-      if (t.includes("16")) return "R16";
-      if (t.includes("quarter")) return "QF";
-      if (t.includes("semi")) return "SF";
-      if (t.includes("final") && !t.includes("semi")) return "Final";
-      return "Group";
+    // 2. Fetch match results from football-data.org (reliable, always up to date)
+    const fdRes = await fetch("https://api.football-data.org/v4/competitions/WC/matches?status=FINISHED", {
+      headers: { "X-Auth-Token": FD_TOKEN }
+    });
+    const fdData = await fdRes.json();
+    const fdMatches = fdData.matches || [];
+
+    const newMatchResults = [];
+    for (const match of fdMatches) {
+      const stage = mapStage(match.stage);
+      if (!stage) continue;
+      const home = TEAM_NAME_FIX[match.homeTeam?.name] || match.homeTeam?.name;
+      const away = TEAM_NAME_FIX[match.awayTeam?.name] || match.awayTeam?.name;
+      const hs = match.score?.fullTime?.home ?? 0;
+      const as2 = match.score?.fullTime?.away ?? 0;
+      newMatchResults.push({ type: "match", team: home, stage, result: hs > as2 ? "W" : hs === as2 ? "D" : "L" });
+      newMatchResults.push({ type: "match", team: away, stage, result: as2 > hs ? "W" : hs === as2 ? "D" : "L" });
     }
+
+    // 3. Fetch scorer data from worldcup26.ir (has goalscorer names)
+    const STRIKER_API_ALIASES = {
+      "v. júnior": "Vinicius Jr", "vinicius júnior": "Vinicius Jr",
+      "vinícius júnior": "Vinicius Jr", "v. jr": "Vinicius Jr",
+      "neymar": "Neymar Jr", "neymar jr.": "Neymar Jr", "neymar jr": "Neymar Jr",
+      "neymar da silva": "Neymar Jr",
+      "h. son": "Son Heung-min", "heung-min son": "Son Heung-min",
+      "son heung min": "Son Heung-min", "h.m. son": "Son Heung-min",
+      "arling halnd": "Erling Haaland", "e. haaland": "Erling Haaland",
+      "e. håland": "Erling Haaland", "erling halnd": "Erling Haaland",
+      "livnl msi": "Lionel Messi", "l. messi": "Lionel Messi", "leo messi": "Lionel Messi",
+    };
 
     function parseScorers(str) {
       if (!str || str === "null") return [];
@@ -37,153 +94,92 @@ export default async function handler(req, res) {
       return matches.map(m => m.replace(/"/g, ""));
     }
 
-    // Fuzzy matching for misspelled scorer names
-    function normalize(s) {
-      return s.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[.\']/g, "")
-        .replace(/\s+/g, " ").trim();
-    }
-
-    function levenshtein(a, b) {
-      const m = a.length, n = b.length;
-      const dp = Array(m+1).fill(null).map(() => Array(n+1).fill(0));
-      for (let i = 0; i <= m; i++) dp[i][0] = i;
-      for (let j = 0; j <= n; j++) dp[0][j] = j;
-      for (let i = 1; i <= m; i++)
-        for (let j = 1; j <= n; j++)
-          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
-      return dp[m][n];
-    }
-
-    function stringSimilarity(a, b) {
-      const na = normalize(a), nb = normalize(b);
-      const dist = levenshtein(na, nb);
-      return 1 - dist / Math.max(na.length, nb.length);
-    }
-
-    // API name → our striker name overrides (for cases where last-name match fails)
-    const STRIKER_API_ALIASES = {
-      "v. júnior": "Vinicius Jr",
-      "vinicius júnior": "Vinicius Jr",
-      "vinícius júnior": "Vinicius Jr",
-      "v. jr": "Vinicius Jr",
-      "neymar": "Neymar Jr",
-      "neymar jr.": "Neymar Jr",
-      "neymar jr": "Neymar Jr",
-      "neymar da silva": "Neymar Jr",
-      "h. son": "Son Heung-min",
-      "heung-min son": "Son Heung-min",
-      "son heung min": "Son Heung-min",
-      "h.m. son": "Son Heung-min",
-      "arling halnd": "Erling Haaland",
-      "e. haaland": "Erling Haaland",
-      "e. håland": "Erling Haaland",
-      "erling halnd": "Erling Haaland",
-      "livnl msi": "Lionel Messi",
-      "l. messi": "Lionel Messi",
-      "leo messi": "Lionel Messi",
-    };
-
     function matchScorer(scorerEntry) {
       if (!scorerEntry) return null;
       if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
       const nameOnly = scorerEntry.replace(/\s+\d+[\+\d]*'.*$/, "").replace(/\([^)]*\)/g, "").trim();
       const lower = nameOnly.toLowerCase();
-      // Check aliases first
+
+      // Check aliases
       if (STRIKER_API_ALIASES[lower] && allPickedStrikers.includes(STRIKER_API_ALIASES[lower])) {
         return STRIKER_API_ALIASES[lower];
       }
+      // Exact match
       const exact = allPickedStrikers.find(s => s.toLowerCase() === lower);
       if (exact) return exact;
+      // Last name match
       const lastName = lower.split(/\s+/).pop();
       if (lastName.length > 2) {
-        const lastMatch = allPickedStrikers.find(s => {
-          const sLast = s.toLowerCase().split(/\s+/).pop();
-          return sLast === lastName;
-        });
+        const lastMatch = allPickedStrikers.find(s => s.toLowerCase().split(/\s+/).pop() === lastName);
         if (lastMatch) return lastMatch;
       }
-      // Fuzzy match as last resort — use both full name AND last name to avoid false positives
+      // Fuzzy match
       let bestMatch = null, bestScore = 0;
       for (const s of allPickedStrikers) {
         const fullSim = stringSimilarity(nameOnly, s);
         const scorerLast = normalize(nameOnly).split(/\s+/).pop() || "";
         const strikerLast = normalize(s).split(/\s+/).pop() || "";
         const lastSim = (scorerLast.length > 2 && strikerLast.length > 2) ? stringSimilarity(scorerLast, strikerLast) : 0;
-        // Require both full name similarity >= 0.5 AND last name similarity >= 0.5
         if (fullSim >= 0.55 && lastSim >= 0.6 && (fullSim + lastSim) > bestScore) {
           bestScore = fullSim + lastSim;
           bestMatch = s;
         }
       }
       if (bestMatch) return bestMatch;
-
       return null;
     }
 
-    const newMatchResults = [];
+    let scorerSource = "none";
     const scorerGoals = {};
+    const debug = [];
 
-    for (const game of games) {
-      const stage = getStage(game);
-      const TEAM_NAME_FIX = {
-        "United States": "USA",
-        "Korea Republic": "South Korea",
-        "Türkiye": "Turkey",
-        "Czechia": "Czech Republic",
-        "Curaçao": "Curacao",
-        "Congo DR": "DR Congo",
-        "Democratic Republic of the Congo": "DR Congo",
-        "Cape Verde Islands": "Cape Verde",
-        "IR Iran": "Iran",
-      };
-      const home = TEAM_NAME_FIX[game.home_team_name_en] || game.home_team_name_en;
-      const away = TEAM_NAME_FIX[game.away_team_name_en] || game.away_team_name_en;
-      const hScore = parseInt(game.home_score || "0");
-      const aScore = parseInt(game.away_score || "0");
+    try {
+      const wcRes = await fetch("https://worldcup26.ir/get/games");
+      const wcData = await wcRes.json();
+      const wcGames = (wcData.games || []).filter(g => g.finished === "TRUE");
+      scorerSource = "worldcup26.ir";
 
-      newMatchResults.push({ type: "match", team: home, stage, result: hScore > aScore ? "W" : hScore === aScore ? "D" : "L" });
-      newMatchResults.push({ type: "match", team: away, stage, result: aScore > hScore ? "W" : hScore === aScore ? "D" : "L" });
-
-      const homeScorers = parseScorers(game.home_scorers);
-      const awayScorers = parseScorers(game.away_scorers);
-      for (const s of [...homeScorers, ...awayScorers]) {
-        const matched = matchScorer(s);
-        if (matched) scorerGoals[matched] = (scorerGoals[matched] || 0) + 1;
+      for (const game of wcGames) {
+        const homeScorers = parseScorers(game.home_scorers);
+        const awayScorers = parseScorers(game.away_scorers);
+        if (homeScorers.length > 0 || awayScorers.length > 0) {
+          const matched = [...homeScorers, ...awayScorers].map(s => ({ raw: s, match: matchScorer(s) }));
+          debug.push({ match: (game.home_team_name_en || "?") + " vs " + (game.away_team_name_en || "?"), scorers: matched });
+        }
+        for (const s of [...homeScorers, ...awayScorers]) {
+          const m = matchScorer(s);
+          if (m) scorerGoals[m] = (scorerGoals[m] || 0) + 1;
+        }
       }
+    } catch (e) {
+      scorerSource = "failed: " + e.message;
     }
 
     const newGoalResults = Object.entries(scorerGoals).map(([player, goals]) => ({
       type: "goal", player, goals, stage: "tournament"
     }));
 
-    // Safety check: only replace if we got real data
+    // Safety check
     const allNew = [...newMatchResults, ...newGoalResults];
-    if (allNew.length === 0 && games.length === 0) {
-      return res.status(200).json({ ok: false, error: "API returned no data — keeping existing results" });
+    if (allNew.length === 0 && fdMatches.length === 0) {
+      return res.status(200).json({ ok: false, error: "No data — keeping existing results" });
     }
 
-    // Delete all existing results
+    // Delete and replace
     await fetch(`${SUPABASE_URL}/rest/v1/results?id=gte.0`, { method: "DELETE", headers: SUPA_HEADERS });
-
-    // Insert new results
     for (const r of allNew) {
       await fetch(`${SUPABASE_URL}/rest/v1/results`, { method: "POST", headers: SUPA_HEADERS, body: JSON.stringify(r) });
     }
 
-    // Debug: show parsed scorers per game for France
-    const debug = [];
-    for (const game of games) {
-      const hs = parseScorers(game.home_scorers);
-      const as2 = parseScorers(game.away_scorers);
-      if (hs.length > 0 || as2.length > 0) {
-        const matched = [...hs, ...as2].map(s => ({ raw: s, match: matchScorer(s) }));
-        debug.push({ match: game.home_team_name_en + " vs " + game.away_team_name_en, scorers: matched });
-      }
-    }
-
-    res.status(200).json({ ok: true, games: games.length, results: allNew.length, scorers: scorerGoals, debug });
+    res.status(200).json({
+      ok: true,
+      matchSource: "football-data.org",
+      scorerSource,
+      games: fdMatches.length,
+      results: allNew.length,
+      scorers: scorerGoals,
+      debug
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
