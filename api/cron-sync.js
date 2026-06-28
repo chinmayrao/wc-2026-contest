@@ -84,6 +84,7 @@ export default async function handler(req, res) {
       "son heung min": "Son Heung-min", "h.m. son": "Son Heung-min",
       "arling halnd": "Erling Haaland", "e. haaland": "Erling Haaland",
       "e. håland": "Erling Haaland", "erling halnd": "Erling Haaland",
+      "hri kin": "Harry Kane", "h. kane": "Harry Kane", "hari kin": "Harry Kane",
       "livnl msi": "Lionel Messi", "l. messi": "Lionel Messi", "leo messi": "Lionel Messi",
       "aiash ivida": "Ayase Ueda", "a. ueda": "Ayase Ueda", "ayash ueda": "Ayase Ueda",
       "lviiz diaz": "Luis Díaz", "l. diaz": "Luis Díaz",
