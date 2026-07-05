@@ -75,6 +75,9 @@ export default async function handler(req, res) {
     }
 
     // 3. Fetch scorer data from worldcup26.ir (has goalscorer names)
+    // Names that share last names with picked strikers but are different players
+    const BLOCKED_NAMES = ["lisandro martínez", "lisandro martinez", "l. martínez", "l. martinez"];
+
     const STRIKER_API_ALIASES = {
       "v. júnior": "Vinicius Jr", "vinicius júnior": "Vinicius Jr",
       "vinícius júnior": "Vinicius Jr", "v. jr": "Vinicius Jr",
@@ -102,6 +105,9 @@ export default async function handler(req, res) {
       if (scorerEntry.includes("(OG)") || scorerEntry.includes("(og)")) return null;
       const nameOnly = scorerEntry.replace(/\s+\d+[\+\d]*'.*$/, "").replace(/\([^)]*\)/g, "").trim();
       const lower = nameOnly.toLowerCase();
+
+      // Block known false positives (e.g. Lisandro vs Lautaro Martínez)
+      if (BLOCKED_NAMES.some(b => lower === b || normalize(nameOnly) === normalize(b))) return null;
 
       // Check aliases
       if (STRIKER_API_ALIASES[lower] && allPickedStrikers.includes(STRIKER_API_ALIASES[lower])) {
@@ -143,8 +149,16 @@ export default async function handler(req, res) {
     try {
       const wcRes = await fetch("https://worldcup26.ir/get/games");
       const wcData = await wcRes.json();
-      const wcGames = (wcData.games || []).filter(g => g.finished === "TRUE");
-      scorerSource = "worldcup26.ir";
+      const allWcGames = (wcData.games || []).filter(g => g.finished === "TRUE");
+      // Deduplicate by game ID — API sometimes returns duplicate entries
+      const seenIds = new Set();
+      const wcGames = allWcGames.filter(g => {
+        const id = g.id || g._id;
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      });
+      scorerSource = "worldcup26.ir (" + allWcGames.length + " raw, " + wcGames.length + " deduped)";
 
       for (const game of wcGames) {
         const homeScorers = parseScorers(game.home_scorers);
@@ -166,6 +180,19 @@ export default async function handler(req, res) {
           scorerGoals[g.player] = g.goals;
         }
       }
+    }
+
+    // Merge manual goal overrides from Supabase
+    try {
+      const overridesRes = await fetch(`${SUPABASE_URL}/rest/v1/goal_overrides?select=*`, { headers: SUPA_HEADERS });
+      const overrides = await overridesRes.json();
+      for (const o of overrides) {
+        if (o.player && o.goals) {
+          scorerGoals[o.player] = (scorerGoals[o.player] || 0) + o.goals;
+        }
+      }
+    } catch (e) {
+      // Overrides table might not exist yet — continue without
     }
 
     const newGoalResults = Object.entries(scorerGoals).map(([player, goals]) => ({
