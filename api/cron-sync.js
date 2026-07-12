@@ -91,6 +91,7 @@ export default async function handler(req, res) {
       "livnl msi": "Lionel Messi", "l. messi": "Lionel Messi", "leo messi": "Lionel Messi",
       "aiash ivida": "Ayase Ueda", "a. ueda": "Ayase Ueda", "ayash ueda": "Ayase Ueda",
       "lviiz diaz": "Luis Díaz", "l. diaz": "Luis Díaz",
+      "khvlin alvarz": "Julián Álvarez", "j. alvarez": "Julián Álvarez", "j. álvarez": "Julián Álvarez",
     };
 
     function parseScorers(str) {
